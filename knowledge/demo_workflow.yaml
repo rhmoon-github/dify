@@ -1,0 +1,153 @@
+kind: app
+metadata:
+  author: Dify Assistant
+  description: 演示外部知识库集成功能的完整工作流
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  name: 外部知识库演示工作流
+  tags:
+  - knowledge
+  - external
+  - demo
+spec:
+  app:
+    description: 演示外部知识库集成功能的完整工作流
+    icon: 🤖
+    icon_background: '#FFEAD5'
+    mode: workflow
+    name: 外部知识库演示工作流
+    tags:
+    - knowledge
+    - external
+    - demo
+    workflow:
+      features:
+        citation: true
+        file_upload:
+          enabled: false
+        more_like_this:
+          enabled: false
+        opening_statement: 您好！我是支持外部知识库检索的智能助手，请告诉我您的问题。
+        retriever_resource:
+          enabled: true
+        sensitive_word_avoidance:
+          enabled: false
+        speech_to_text:
+          enabled: false
+        suggested_questions:
+        - 什么是外部知识库？
+        - 外部知识库有什么优势？
+        - 如何配置外部知识库API？
+        - 外部知识库支持哪些功能？
+        suggested_questions_after_answer:
+          enabled: true
+        system_parameters: []
+        text_to_speech:
+          enabled: false
+        user_input_form: []
+      graph:
+        edges:
+        - id: start-to-knowledge
+          source: start
+          target: knowledge_retrieval
+        - id: knowledge-to-llm
+          source: knowledge_retrieval
+          target: llm
+        - id: llm-to-end
+          source: llm
+          target: end
+        nodes:
+        - data:
+            desc: 工作流开始节点
+            title: 开始
+            variables:
+            - label: 用户问题
+              max_length: 1000
+              required: true
+              type: text-input
+              variable: query
+          id: start
+          type: start
+        - data:
+            dataset_ids:
+            - external_dataset_id
+            default_value_dict:
+              result: []
+            desc: 从外部知识库检索相关信息
+            error_strategy: fallback
+            metadata_filtering_mode: disabled
+            multiple_retrieval_config:
+              reranking_enable: false
+              reranking_mode: reranking_model
+              score_threshold: 0.5
+              top_k: 3
+            query_variable_selector:
+            - start
+            - query
+            retrieval_mode: multiple
+            retry_config:
+              enabled: true
+              max_retries: 2
+              retry_interval: 1
+            title: 知识检索
+            vision:
+              configs:
+                detail: high
+              enabled: false
+          id: knowledge_retrieval
+          type: knowledge-retrieval
+        - data:
+            default_value_dict:
+              text: 抱歉，我无法处理您的问题。
+            desc: 使用大语言模型处理检索结果并生成回答
+            error_strategy: fallback
+            model:
+              completion_params:
+                max_tokens: 1000
+                temperature: 0.7
+              mode: chat
+              name: gpt-3.5-turbo
+              provider: openai
+            prompt_template:
+            - role: system
+              text: '你是一个智能助手，请基于提供的知识库信息回答用户问题。
+
+
+                请遵循以下规则：
+
+                1. 基于检索到的知识库内容回答问题
+
+                2. 如果知识库中没有相关信息，请明确说明
+
+                3. 回答要准确、有用、简洁
+
+                4. 引用来源时请注明出处'
+            - role: user
+              text: '用户问题：{{#start.query#}}
+
+
+                知识库检索结果：
+
+                {{#knowledge_retrieval.result#}}'
+            retry_config:
+              enabled: true
+              max_retries: 2
+              retry_interval: 1
+            title: LLM处理
+            vision:
+              configs:
+                detail: high
+              enabled: false
+          id: llm
+          type: llm
+        - data:
+            desc: 工作流结束节点
+            outputs:
+            - value_selector:
+              - llm
+              - text
+              variable: answer
+            title: 结束
+          id: end
+          type: end
+version: 0.4.0

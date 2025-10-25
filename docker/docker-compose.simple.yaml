@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # 使用本地可用的基础镜像作为示例
+  nginx:
+    image: nginx:latest
+    container_name: dify-nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx-simple.conf:/etc/nginx/nginx.conf
+    networks:
+      - dify-network
+
+  # 数据库服务
+  db:
+    image: postgres:15-alpine
+    container_name: dify-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: difyai123456
+      POSTGRES_DB: dify
+    volumes:
+      - ./volumes/db/data:/var/lib/postgresql/data
+    networks:
+      - dify-network
+
+  # Redis缓存
+  redis:
+    image: redis:6-alpine
+    container_name: dify-redis
+    restart: always
+    command: redis-server --requirepass difyai123456
+    volumes:
+      - ./volumes/redis/data:/data
+    networks:
+      - dify-network
+
+networks:
+  dify-network:
+    driver: bridge
+
+volumes:
+  db-data:
+  redis-data:

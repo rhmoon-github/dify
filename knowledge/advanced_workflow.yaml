@@ -1,0 +1,446 @@
+version: 0.4.0
+kind: app
+metadata:
+  name: "高级外部知识库工作流"
+  description: "支持多知识库、条件分支、循环和高级检索的智能问答工作流"
+  author: "Dify Assistant"
+  icon: "🧠"
+  icon_background: "#E3F2FD"
+  tags: ["knowledge", "external", "advanced", "workflow", "rag", "multi-source"]
+spec:
+  app:
+    mode: workflow
+    icon: "🧠"
+    icon_background: "#E3F2FD"
+    name: "高级外部知识库工作流"
+    description: "支持多知识库、条件分支、循环和高级检索的智能问答工作流"
+    tags: ["knowledge", "external", "advanced", "workflow", "rag", "multi-source"]
+    workflow:
+      graph:
+        nodes:
+          - id: "start"
+            type: "start"
+            data:
+              title: "开始"
+              desc: "工作流开始节点"
+              variables:
+                - variable: "query"
+                  label: "用户问题"
+                  type: "text-input"
+                  required: true
+                  max_length: 2000
+                  options: []
+                - variable: "knowledge_sources"
+                  label: "知识库来源"
+                  type: "select"
+                  required: false
+                  options:
+                    - label: "全部知识库"
+                      value: "all"
+                    - label: "技术文档"
+                      value: "tech"
+                    - label: "产品文档"
+                      value: "product"
+                    - label: "用户手册"
+                      value: "manual"
+                - variable: "search_mode"
+                  label: "搜索模式"
+                  type: "select"
+                  required: false
+                  options:
+                    - label: "语义搜索"
+                      value: "semantic"
+                    - label: "关键词搜索"
+                      value: "keyword"
+                    - label: "混合搜索"
+                      value: "hybrid"
+                - variable: "max_results"
+                  label: "最大结果数"
+                  type: "number-input"
+                  required: false
+                  default: 5
+                  min: 1
+                  max: 20
+          - id: "query_analyzer"
+            type: "llm"
+            data:
+              title: "查询分析器"
+              desc: "分析用户查询，确定搜索策略和参数"
+              model:
+                provider: "openai"
+                name: "gpt-4o"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.3
+                  max_tokens: 500
+                  top_p: 0.9
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个查询分析专家，负责分析用户查询并确定最佳的搜索策略。
+                    
+                    请分析用户查询并返回JSON格式的分析结果：
+                    {
+                      "intent": "查询意图（如：技术问题、产品功能、使用指南等）",
+                      "keywords": ["关键词1", "关键词2", "关键词3"],
+                      "complexity": "simple|medium|complex",
+                      "suggested_sources": ["tech", "product", "manual"],
+                      "search_strategy": "semantic|keyword|hybrid",
+                      "confidence": 0.85
+                    }
+                - role: "user"
+                  text: |
+                    用户查询：{{#start.query#}}
+                    知识库来源：{{#start.knowledge_sources#}}
+                    搜索模式：{{#start.search_mode#}}
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                text: '{"intent": "general", "keywords": [], "complexity": "simple", "suggested_sources": ["tech"], "search_strategy": "semantic", "confidence": 0.5}'
+          - id: "knowledge_retrieval_tech"
+            type: "knowledge-retrieval"
+            data:
+              title: "技术文档检索"
+              desc: "从技术文档知识库检索相关信息"
+              query_variable_selector: ["start", "query"]
+              dataset_ids: ["tech_dataset_id"]
+              retrieval_mode: "multiple"
+              multiple_retrieval_config:
+                top_k: 5
+                score_threshold: 0.6
+                reranking_mode: "reranking_model"
+                reranking_enable: true
+                reranking_model:
+                  provider: "cohere"
+                  model: "rerank-multilingual-v2.0"
+              metadata_filtering_mode: "disabled"
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 3
+                retry_interval: 1
+              default_value_dict:
+                result: []
+          - id: "knowledge_retrieval_product"
+            type: "knowledge-retrieval"
+            data:
+              title: "产品文档检索"
+              desc: "从产品文档知识库检索相关信息"
+              query_variable_selector: ["start", "query"]
+              dataset_ids: ["product_dataset_id"]
+              retrieval_mode: "multiple"
+              multiple_retrieval_config:
+                top_k: 5
+                score_threshold: 0.6
+                reranking_mode: "reranking_model"
+                reranking_enable: true
+                reranking_model:
+                  provider: "cohere"
+                  model: "rerank-multilingual-v2.0"
+              metadata_filtering_mode: "disabled"
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 3
+                retry_interval: 1
+              default_value_dict:
+                result: []
+          - id: "knowledge_retrieval_manual"
+            type: "knowledge-retrieval"
+            data:
+              title: "用户手册检索"
+              desc: "从用户手册知识库检索相关信息"
+              query_variable_selector: ["start", "query"]
+              dataset_ids: ["manual_dataset_id"]
+              retrieval_mode: "multiple"
+              multiple_retrieval_config:
+                top_k: 5
+                score_threshold: 0.6
+                reranking_mode: "reranking_model"
+                reranking_enable: true
+                reranking_model:
+                  provider: "cohere"
+                  model: "rerank-multilingual-v2.0"
+              metadata_filtering_mode: "disabled"
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 3
+                retry_interval: 1
+              default_value_dict:
+                result: []
+          - id: "result_merger"
+            type: "code"
+            data:
+              title: "结果合并器"
+              desc: "合并多个知识库的检索结果"
+              code_language: "python3"
+              code: |
+                def main(query, tech_results, product_results, manual_results, analysis):
+                    import json
+                    
+                    # 解析查询分析结果
+                    try:
+                        analysis_data = json.loads(analysis)
+                        suggested_sources = analysis_data.get('suggested_sources', ['tech'])
+                    except:
+                        suggested_sources = ['tech']
+                    
+                    # 合并所有结果
+                    all_results = []
+                    
+                    # 添加技术文档结果
+                    if 'tech' in suggested_sources and tech_results:
+                        for result in tech_results:
+                            result['source'] = 'tech'
+                            result['priority'] = 1.0
+                            all_results.append(result)
+                    
+                    # 添加产品文档结果
+                    if 'product' in suggested_sources and product_results:
+                        for result in product_results:
+                            result['source'] = 'product'
+                            result['priority'] = 0.9
+                            all_results.append(result)
+                    
+                    # 添加用户手册结果
+                    if 'manual' in suggested_sources and manual_results:
+                        for result in manual_results:
+                            result['source'] = 'manual'
+                            result['priority'] = 0.8
+                            all_results.append(result)
+                    
+                    # 按优先级和相似度排序
+                    all_results.sort(key=lambda x: (x.get('priority', 0.5), x.get('metadata', {}).get('score', 0)), reverse=True)
+                    
+                    # 限制结果数量
+                    max_results = 10
+                    merged_results = all_results[:max_results]
+                    
+                    return {
+                        "merged_results": merged_results,
+                        "total_sources": len(set(r.get('source', '') for r in merged_results)),
+                        "analysis": analysis_data
+                    }
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                merged_results: []
+                total_sources: 0
+                analysis: {}
+          - id: "content_enhancer"
+            type: "llm"
+            data:
+              title: "内容增强器"
+              desc: "增强和优化检索到的内容"
+              model:
+                provider: "openai"
+                name: "gpt-4o"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.5
+                  max_tokens: 1000
+                  top_p: 0.9
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个内容增强专家，负责优化和增强检索到的知识库内容。
+                    
+                    请对检索结果进行以下处理：
+                    1. 提取关键信息
+                    2. 补充相关背景
+                    3. 优化表达方式
+                    4. 确保信息准确性
+                    
+                    返回增强后的内容，保持原始信息的准确性。
+                - role: "user"
+                  text: |
+                    原始查询：{{#start.query#}}
+                    检索结果：{{#result_merger.merged_results#}}
+                    查询分析：{{#result_merger.analysis#}}
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                text: "内容增强失败"
+          - id: "answer_generator"
+            type: "llm"
+            data:
+              title: "答案生成器"
+              desc: "基于增强内容生成最终答案"
+              model:
+                provider: "openai"
+                name: "gpt-4o"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.7
+                  max_tokens: 2000
+                  top_p: 0.9
+                  presence_penalty: 0.1
+                  frequency_penalty: 0.1
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个专业的智能助手，负责基于知识库内容回答用户问题。
+                    
+                    请遵循以下规则：
+                    1. 基于提供的知识库内容回答问题
+                    2. 如果知识库中没有相关信息，请明确说明
+                    3. 回答要准确、有用、结构清晰
+                    4. 引用来源时请注明出处
+                    5. 提供相关的后续问题建议
+                    6. 保持专业和友好的语调
+                - role: "user"
+                  text: |
+                    用户问题：{{#start.query#}}
+                    
+                    增强内容：{{#content_enhancer.text#}}
+                    
+                    检索统计：
+                    - 总来源数：{{#result_merger.total_sources#}}
+                    - 检索结果数：{{#result_merger.merged_results.length#}}
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 3
+                retry_interval: 1
+              default_value_dict:
+                text: "抱歉，我无法处理您的问题。"
+          - id: "quality_checker"
+            type: "llm"
+            data:
+              title: "质量检查器"
+              desc: "检查答案质量和完整性"
+              model:
+                provider: "openai"
+                name: "gpt-4o"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.3
+                  max_tokens: 500
+                  top_p: 0.9
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个质量检查专家，负责评估答案的质量和完整性。
+                    
+                    请评估以下方面并返回JSON格式的结果：
+                    {
+                      "quality_score": 0.85,
+                      "completeness": 0.9,
+                      "accuracy": 0.8,
+                      "clarity": 0.85,
+                      "suggestions": ["建议1", "建议2"],
+                      "needs_improvement": true
+                    }
+                - role: "user"
+                  text: |
+                    原始问题：{{#start.query#}}
+                    生成的答案：{{#answer_generator.text#}}
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                text: '{"quality_score": 0.5, "completeness": 0.5, "accuracy": 0.5, "clarity": 0.5, "suggestions": [], "needs_improvement": true}'
+          - id: "end"
+            type: "end"
+            data:
+              title: "结束"
+              desc: "工作流结束节点"
+              outputs:
+                - value_selector: ["answer_generator", "text"]
+                  variable: "answer"
+                - value_selector: ["result_merger", "merged_results"]
+                  variable: "sources"
+                - value_selector: ["quality_checker", "text"]
+                  variable: "quality_assessment"
+        edges:
+          - id: "start-to-analyzer"
+            source: "start"
+            target: "query_analyzer"
+          - id: "analyzer-to-tech"
+            source: "query_analyzer"
+            target: "knowledge_retrieval_tech"
+          - id: "analyzer-to-product"
+            source: "query_analyzer"
+            target: "knowledge_retrieval_product"
+          - id: "analyzer-to-manual"
+            source: "query_analyzer"
+            target: "knowledge_retrieval_manual"
+          - id: "tech-to-merger"
+            source: "knowledge_retrieval_tech"
+            target: "result_merger"
+          - id: "product-to-merger"
+            source: "knowledge_retrieval_product"
+            target: "result_merger"
+          - id: "manual-to-merger"
+            source: "knowledge_retrieval_manual"
+            target: "result_merger"
+          - id: "analyzer-to-merger"
+            source: "query_analyzer"
+            target: "result_merger"
+          - id: "merger-to-enhancer"
+            source: "result_merger"
+            target: "content_enhancer"
+          - id: "enhancer-to-generator"
+            source: "content_enhancer"
+            target: "answer_generator"
+          - id: "generator-to-checker"
+            source: "answer_generator"
+            target: "quality_checker"
+          - id: "checker-to-end"
+            source: "quality_checker"
+            target: "end"
+      features:
+        file_upload:
+          enabled: false
+          image:
+            enabled: false
+            number_limits: 3
+            detail: "high"
+            transfer_methods: ["remote_url", "local_file"]
+        opening_statement: "您好！我是高级外部知识库智能助手，支持多源知识检索和智能分析。请告诉我您的问题，我会为您提供最准确的答案。"
+        suggested_questions: 
+          - "如何使用多知识库搜索？"
+          - "什么是语义搜索和关键词搜索？"
+          - "如何提高搜索结果的准确性？"
+          - "支持哪些知识库来源？"
+        suggested_questions_after_answer:
+          enabled: true
+        speech_to_text:
+          enabled: false
+        text_to_speech:
+          enabled: false
+        citation: true
+        retriever_resource:
+          enabled: true
+        sensitive_word_avoidance:
+          enabled: false
+        more_like_this:
+          enabled: true
+        user_input_form: []
+        system_parameters: []

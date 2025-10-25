@@ -1,0 +1,134 @@
+version: 0.4.0
+kind: app
+metadata:
+  name: "简单外部知识库工作流"
+  description: "一个简单的支持外部知识库的工作流示例"
+  author: "Dify Assistant"
+  icon: "🤖"
+  icon_background: "#FFEAD5"
+  tags: ["knowledge", "external", "simple"]
+spec:
+  app:
+    mode: workflow
+    icon: "🤖"
+    icon_background: "#FFEAD5"
+    name: "简单外部知识库工作流"
+    description: "一个简单的支持外部知识库的工作流示例"
+    tags: ["knowledge", "external", "simple"]
+    workflow:
+      graph:
+        nodes:
+          - id: "start"
+            type: "start"
+            data:
+              title: "开始"
+              desc: "工作流开始节点"
+              variables:
+                - variable: "query"
+                  label: "用户问题"
+                  type: "text-input"
+                  required: true
+                  max_length: 1000
+          - id: "knowledge_retrieval"
+            type: "knowledge-retrieval"
+            data:
+              title: "知识检索"
+              desc: "从外部知识库检索相关信息"
+              query_variable_selector: ["start", "query"]
+              dataset_ids: ["external_dataset_id"]
+              retrieval_mode: "multiple"
+              multiple_retrieval_config:
+                top_k: 3
+                score_threshold: 0.5
+                reranking_mode: "reranking_model"
+                reranking_enable: false
+              metadata_filtering_mode: "disabled"
+              vision:
+                enabled: false
+                configs:
+                  detail: "high"
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                result: []
+          - id: "llm"
+            type: "llm"
+            data:
+              title: "LLM处理"
+              desc: "使用大语言模型处理检索结果并生成回答"
+              model:
+                provider: "openai"
+                name: "gpt-3.5-turbo"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.7
+                  max_tokens: 1000
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个智能助手，请基于提供的知识库信息回答用户问题。
+                    
+                    请遵循以下规则：
+                    1. 基于检索到的知识库内容回答问题
+                    2. 如果知识库中没有相关信息，请明确说明
+                    3. 回答要准确、有用、简洁
+                - role: "user"
+                  text: |
+                    用户问题：{{#start.query#}}
+                    
+                    知识库检索结果：
+                    {{#knowledge_retrieval.result#}}
+              vision:
+                enabled: false
+                configs:
+                  detail: "high"
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                text: "抱歉，我无法处理您的问题。"
+          - id: "end"
+            type: "end"
+            data:
+              title: "结束"
+              desc: "工作流结束节点"
+              outputs:
+                - value_selector: ["llm", "text"]
+                  variable: "answer"
+        edges:
+          - id: "start-to-knowledge"
+            source: "start"
+            target: "knowledge_retrieval"
+          - id: "knowledge-to-llm"
+            source: "knowledge_retrieval"
+            target: "llm"
+          - id: "llm-to-end"
+            source: "llm"
+            target: "end"
+      features:
+        file_upload:
+          enabled: false
+        opening_statement: "您好！我是支持外部知识库检索的智能助手，请告诉我您的问题。"
+        suggested_questions: 
+          - "如何使用外部知识库？"
+          - "外部知识库支持哪些功能？"
+        suggested_questions_after_answer:
+          enabled: true
+        speech_to_text:
+          enabled: false
+        text_to_speech:
+          enabled: false
+        citation: true
+        retriever_resource:
+          enabled: true
+        sensitive_word_avoidance:
+          enabled: false
+        more_like_this:
+          enabled: false
+        user_input_form: []
+        system_parameters: []

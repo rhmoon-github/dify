@@ -1,0 +1,505 @@
+version: 0.4.0
+kind: app
+metadata:
+  name: "条件分支外部知识库工作流"
+  description: "支持条件分支、循环和动态路由的智能问答工作流"
+  author: "Dify Assistant"
+  icon: "🔀"
+  icon_background: "#F3E5F5"
+  tags: ["knowledge", "external", "conditional", "workflow", "branching"]
+spec:
+  app:
+    mode: workflow
+    icon: "🔀"
+    icon_background: "#F3E5F5"
+    name: "条件分支外部知识库工作流"
+    description: "支持条件分支、循环和动态路由的智能问答工作流"
+    tags: ["knowledge", "external", "conditional", "workflow", "branching"]
+    workflow:
+      graph:
+        nodes:
+          - id: "start"
+            type: "start"
+            data:
+              title: "开始"
+              desc: "工作流开始节点"
+              variables:
+                - variable: "query"
+                  label: "用户问题"
+                  type: "text-input"
+                  required: true
+                  max_length: 2000
+                - variable: "user_type"
+                  label: "用户类型"
+                  type: "select"
+                  required: false
+                  options:
+                    - label: "普通用户"
+                      value: "user"
+                    - label: "管理员"
+                      value: "admin"
+                    - label: "开发者"
+                      value: "developer"
+                - variable: "priority"
+                  label: "优先级"
+                  type: "select"
+                  required: false
+                  options:
+                    - label: "低"
+                      value: "low"
+                    - label: "中"
+                      value: "medium"
+                    - label: "高"
+                      value: "high"
+                    - label: "紧急"
+                      value: "urgent"
+          - id: "query_classifier"
+            type: "llm"
+            data:
+              title: "查询分类器"
+              desc: "分类用户查询类型和复杂度"
+              model:
+                provider: "openai"
+                name: "gpt-4o"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.3
+                  max_tokens: 300
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个查询分类专家，负责分析用户查询并确定处理策略。
+                    
+                    请返回JSON格式的分类结果：
+                    {
+                      "category": "technical|product|support|general",
+                      "complexity": "simple|medium|complex",
+                      "requires_expert": true|false,
+                      "estimated_time": "1-2分钟|5-10分钟|15-30分钟",
+                      "suggested_actions": ["action1", "action2"],
+                      "confidence": 0.85
+                    }
+                - role: "user"
+                  text: |
+                    用户查询：{{#start.query#}}
+                    用户类型：{{#start.user_type#}}
+                    优先级：{{#start.priority#}}
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                text: '{"category": "general", "complexity": "simple", "requires_expert": false, "estimated_time": "1-2分钟", "suggested_actions": ["basic_search"], "confidence": 0.5}'
+          - id: "condition_router"
+            type: "if-else"
+            data:
+              title: "条件路由器"
+              desc: "根据查询分类和用户类型路由到不同的处理分支"
+              conditions:
+                - id: "technical_complex"
+                  logical_operator: "and"
+                  conditions:
+                    - variable_selector: ["query_classifier", "text"]
+                      comparison_operator: "contains"
+                      value: "technical"
+                    - variable_selector: ["query_classifier", "text"]
+                      comparison_operator: "contains"
+                      value: "complex"
+                - id: "admin_urgent"
+                  logical_operator: "and"
+                  conditions:
+                    - variable_selector: ["start", "user_type"]
+                      comparison_operator: "is"
+                      value: "admin"
+                    - variable_selector: ["start", "priority"]
+                      comparison_operator: "is"
+                      value: "urgent"
+                - id: "developer_technical"
+                  logical_operator: "and"
+                  conditions:
+                    - variable_selector: ["start", "user_type"]
+                      comparison_operator: "is"
+                      value: "developer"
+                    - variable_selector: ["query_classifier", "text"]
+                      comparison_operator: "contains"
+                      value: "technical"
+              logical_operator: "or"
+          - id: "expert_knowledge_search"
+            type: "knowledge-retrieval"
+            data:
+              title: "专家知识检索"
+              desc: "从专家级知识库检索复杂技术问题"
+              query_variable_selector: ["start", "query"]
+              dataset_ids: ["expert_dataset_id"]
+              retrieval_mode: "multiple"
+              multiple_retrieval_config:
+                top_k: 10
+                score_threshold: 0.7
+                reranking_mode: "reranking_model"
+                reranking_enable: true
+                reranking_model:
+                  provider: "cohere"
+                  model: "rerank-multilingual-v2.0"
+              metadata_filtering_mode: "disabled"
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 3
+                retry_interval: 1
+              default_value_dict:
+                result: []
+          - id: "standard_knowledge_search"
+            type: "knowledge-retrieval"
+            data:
+              title: "标准知识检索"
+              desc: "从标准知识库检索一般问题"
+              query_variable_selector: ["start", "query"]
+              dataset_ids: ["standard_dataset_id"]
+              retrieval_mode: "multiple"
+              multiple_retrieval_config:
+                top_k: 5
+                score_threshold: 0.6
+                reranking_mode: "reranking_model"
+                reranking_enable: true
+                reranking_model:
+                  provider: "cohere"
+                  model: "rerank-multilingual-v2.0"
+              metadata_filtering_mode: "disabled"
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 3
+                retry_interval: 1
+              default_value_dict:
+                result: []
+          - id: "quick_knowledge_search"
+            type: "knowledge-retrieval"
+            data:
+              title: "快速知识检索"
+              desc: "从快速知识库检索简单问题"
+              query_variable_selector: ["start", "query"]
+              dataset_ids: ["quick_dataset_id"]
+              retrieval_mode: "multiple"
+              multiple_retrieval_config:
+                top_k: 3
+                score_threshold: 0.5
+                reranking_mode: "reranking_model"
+                reranking_enable: false
+              metadata_filtering_mode: "disabled"
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                result: []
+          - id: "expert_analyzer"
+            type: "llm"
+            data:
+              title: "专家分析器"
+              desc: "使用专家级模型分析复杂技术问题"
+              model:
+                provider: "openai"
+                name: "gpt-4o"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.3
+                  max_tokens: 3000
+                  top_p: 0.9
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个技术专家，负责分析复杂的技术问题并提供专业解答。
+                    
+                    请提供：
+                    1. 详细的技术分析
+                    2. 可能的解决方案
+                    3. 相关的最佳实践
+                    4. 潜在的风险和注意事项
+                    5. 进一步的参考资料
+                - role: "user"
+                  text: |
+                    用户查询：{{#start.query#}}
+                    用户类型：{{#start.user_type#}}
+                    检索结果：{{#expert_knowledge_search.result#}}
+                    查询分类：{{#query_classifier.text#}}
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 3
+                retry_interval: 1
+              default_value_dict:
+                text: "专家分析暂时不可用"
+          - id: "standard_analyzer"
+            type: "llm"
+            data:
+              title: "标准分析器"
+              desc: "使用标准模型分析一般问题"
+              model:
+                provider: "openai"
+                name: "gpt-3.5-turbo"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.7
+                  max_tokens: 1500
+                  top_p: 0.9
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个智能助手，负责回答一般性问题。
+                    
+                    请提供：
+                    1. 清晰的解答
+                    2. 相关的背景信息
+                    3. 实用的建议
+                    4. 相关资源链接
+                - role: "user"
+                  text: |
+                    用户查询：{{#start.query#}}
+                    用户类型：{{#start.user_type#}}
+                    检索结果：{{#standard_knowledge_search.result#}}
+                    查询分类：{{#query_classifier.text#}}
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                text: "标准分析暂时不可用"
+          - id: "quick_analyzer"
+            type: "llm"
+            data:
+              title: "快速分析器"
+              desc: "使用快速模型分析简单问题"
+              model:
+                provider: "openai"
+                name: "gpt-3.5-turbo"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.8
+                  max_tokens: 800
+                  top_p: 0.9
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个快速响应助手，负责快速回答简单问题。
+                    
+                    请提供：
+                    1. 简洁的解答
+                    2. 关键要点
+                    3. 快速操作指南
+                - role: "user"
+                  text: |
+                    用户查询：{{#start.query#}}
+                    用户类型：{{#start.user_type#}}
+                    检索结果：{{#quick_knowledge_search.result#}}
+                    查询分类：{{#query_classifier.text#}}
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                text: "快速分析暂时不可用"
+          - id: "result_merger"
+            type: "code"
+            data:
+              title: "结果合并器"
+              desc: "合并不同分支的处理结果"
+              code_language: "python3"
+              code: |
+                def main(expert_result, standard_result, quick_result, classification, user_type, priority):
+                    import json
+                    
+                    # 解析分类结果
+                    try:
+                        classification_data = json.loads(classification)
+                        category = classification_data.get('category', 'general')
+                        complexity = classification_data.get('complexity', 'simple')
+                        confidence = classification_data.get('confidence', 0.5)
+                    except:
+                        category = 'general'
+                        complexity = 'simple'
+                        confidence = 0.5
+                    
+                    # 选择最佳结果
+                    if expert_result and expert_result.strip() != "专家分析暂时不可用":
+                        selected_result = expert_result
+                        result_type = "expert"
+                        processing_time = "15-30分钟"
+                    elif standard_result and standard_result.strip() != "标准分析暂时不可用":
+                        selected_result = standard_result
+                        result_type = "standard"
+                        processing_time = "5-10分钟"
+                    elif quick_result and quick_result.strip() != "快速分析暂时不可用":
+                        selected_result = quick_result
+                        result_type = "quick"
+                        processing_time = "1-2分钟"
+                    else:
+                        selected_result = "抱歉，暂时无法处理您的问题。"
+                        result_type = "error"
+                        processing_time = "0分钟"
+                    
+                    # 生成元数据
+                    metadata = {
+                        "category": category,
+                        "complexity": complexity,
+                        "user_type": user_type,
+                        "priority": priority,
+                        "result_type": result_type,
+                        "processing_time": processing_time,
+                        "confidence": confidence,
+                        "timestamp": "2024-01-01T00:00:00Z"
+                    }
+                    
+                    return {
+                        "final_answer": selected_result,
+                        "metadata": metadata,
+                        "success": result_type != "error"
+                    }
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                final_answer: "处理失败"
+                metadata: {}
+                success: false
+          - id: "quality_controller"
+            type: "llm"
+            data:
+              title: "质量控制器"
+              desc: "控制答案质量和用户满意度"
+              model:
+                provider: "openai"
+                name: "gpt-4o"
+                mode: "chat"
+                completion_params:
+                  temperature: 0.3
+                  max_tokens: 500
+                  top_p: 0.9
+              prompt_template:
+                - role: "system"
+                  text: |
+                    你是一个质量控制器，负责评估答案质量并提供改进建议。
+                    
+                    请评估以下方面并返回JSON格式的结果：
+                    {
+                      "quality_score": 0.85,
+                      "completeness": 0.9,
+                      "accuracy": 0.8,
+                      "user_satisfaction": 0.85,
+                      "improvement_suggestions": ["建议1", "建议2"],
+                      "follow_up_questions": ["问题1", "问题2"],
+                      "escalation_needed": false
+                    }
+                - role: "user"
+                  text: |
+                    原始问题：{{#start.query#}}
+                    最终答案：{{#result_merger.final_answer#}}
+                    处理元数据：{{#result_merger.metadata#}}
+              vision:
+                enabled: false
+              error_strategy: "fallback"
+              retry_config:
+                enabled: true
+                max_retries: 2
+                retry_interval: 1
+              default_value_dict:
+                text: '{"quality_score": 0.5, "completeness": 0.5, "accuracy": 0.5, "user_satisfaction": 0.5, "improvement_suggestions": [], "follow_up_questions": [], "escalation_needed": false}'
+          - id: "end"
+            type: "end"
+            data:
+              title: "结束"
+              desc: "工作流结束节点"
+              outputs:
+                - value_selector: ["result_merger", "final_answer"]
+                  variable: "answer"
+                - value_selector: ["result_merger", "metadata"]
+                  variable: "processing_info"
+                - value_selector: ["quality_controller", "text"]
+                  variable: "quality_assessment"
+        edges:
+          - id: "start-to-classifier"
+            source: "start"
+            target: "query_classifier"
+          - id: "classifier-to-router"
+            source: "query_classifier"
+            target: "condition_router"
+          - id: "router-to-expert-search"
+            source: "condition_router"
+            target: "expert_knowledge_search"
+            condition: "technical_complex"
+          - id: "router-to-standard-search"
+            source: "condition_router"
+            target: "standard_knowledge_search"
+            condition: "admin_urgent"
+          - id: "router-to-quick-search"
+            source: "condition_router"
+            target: "quick_knowledge_search"
+            condition: "developer_technical"
+          - id: "expert-search-to-analyzer"
+            source: "expert_knowledge_search"
+            target: "expert_analyzer"
+          - id: "standard-search-to-analyzer"
+            source: "standard_knowledge_search"
+            target: "standard_analyzer"
+          - id: "quick-search-to-analyzer"
+            source: "quick_knowledge_search"
+            target: "quick_analyzer"
+          - id: "expert-analyzer-to-merger"
+            source: "expert_analyzer"
+            target: "result_merger"
+          - id: "standard-analyzer-to-merger"
+            source: "standard_analyzer"
+            target: "result_merger"
+          - id: "quick-analyzer-to-merger"
+            source: "quick_analyzer"
+            target: "result_merger"
+          - id: "classifier-to-merger"
+            source: "query_classifier"
+            target: "result_merger"
+          - id: "merger-to-controller"
+            source: "result_merger"
+            target: "quality_controller"
+          - id: "controller-to-end"
+            source: "quality_controller"
+            target: "end"
+      features:
+        file_upload:
+          enabled: false
+        opening_statement: "您好！我是智能条件分支助手，会根据您的问题类型和用户权限提供最适合的解答。请告诉我您的问题。"
+        suggested_questions: 
+          - "如何提高查询的准确性？"
+          - "不同用户类型有什么权限差异？"
+          - "如何处理复杂的技术问题？"
+          - "如何设置问题优先级？"
+        suggested_questions_after_answer:
+          enabled: true
+        speech_to_text:
+          enabled: false
+        text_to_speech:
+          enabled: false
+        citation: true
+        retriever_resource:
+          enabled: true
+        sensitive_word_avoidance:
+          enabled: false
+        more_like_this:
+          enabled: true
+        user_input_form: []
+        system_parameters: []

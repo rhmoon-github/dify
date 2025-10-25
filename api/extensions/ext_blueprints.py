@@ -22,6 +22,7 @@ def init_app(app: DifyApp):
 
     CORS(
         service_api_bp,
+        resources={r"/*": {"origins": "*"}},
         allow_headers=list(SERVICE_API_HEADERS),
         methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
     )
@@ -29,7 +30,7 @@ def init_app(app: DifyApp):
 
     CORS(
         web_bp,
-        resources={r"/*": {"origins": dify_config.WEB_API_CORS_ALLOW_ORIGINS}},
+        resources={r"/*": {"origins": dify_config.WEB_API_CORS_ALLOW_ORIGINS if dify_config.WEB_API_CORS_ALLOW_ORIGINS else "*"}},
         supports_credentials=True,
         allow_headers=list(AUTHENTICATED_HEADERS),
         methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
@@ -39,7 +40,7 @@ def init_app(app: DifyApp):
 
     CORS(
         console_app_bp,
-        resources={r"/*": {"origins": dify_config.CONSOLE_CORS_ALLOW_ORIGINS}},
+        resources={r"/*": {"origins": dify_config.CONSOLE_CORS_ALLOW_ORIGINS if dify_config.CONSOLE_CORS_ALLOW_ORIGINS else "*"}},
         supports_credentials=True,
         allow_headers=list(AUTHENTICATED_HEADERS),
         methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
@@ -49,6 +50,7 @@ def init_app(app: DifyApp):
 
     CORS(
         files_bp,
+        resources={r"/*": {"origins": "*"}},
         allow_headers=list(FILES_HEADERS),
         methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
     )

@@ -350,7 +350,11 @@ class HttpConfig(BaseSettings):
 
     @computed_field
     def CONSOLE_CORS_ALLOW_ORIGINS(self) -> list[str]:
-        return self.inner_CONSOLE_CORS_ALLOW_ORIGINS.split(",")
+        origins = self.inner_CONSOLE_CORS_ALLOW_ORIGINS.split(",")
+        # Handle wildcard case - return empty list to allow all origins
+        if origins == ["*"] or (len(origins) == 1 and origins[0].strip() == "*"):
+            return []
+        return [origin.strip() for origin in origins if origin.strip()]
 
     inner_WEB_API_CORS_ALLOW_ORIGINS: str = Field(
         description="",
@@ -360,7 +364,11 @@ class HttpConfig(BaseSettings):
 
     @computed_field
     def WEB_API_CORS_ALLOW_ORIGINS(self) -> list[str]:
-        return self.inner_WEB_API_CORS_ALLOW_ORIGINS.split(",")
+        origins = self.inner_WEB_API_CORS_ALLOW_ORIGINS.split(",")
+        # Handle wildcard case - return empty list to allow all origins
+        if origins == ["*"] or (len(origins) == 1 and origins[0].strip() == "*"):
+            return []
+        return [origin.strip() for origin in origins if origin.strip()]
 
     HTTP_REQUEST_MAX_CONNECT_TIMEOUT: int = Field(
         ge=1, description="Maximum connection timeout in seconds for HTTP requests", default=10
